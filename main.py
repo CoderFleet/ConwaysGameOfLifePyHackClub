@@ -1,5 +1,6 @@
 import tkinter as tk
 import random
+import pickle
 
 class GameOfLife:
     def __init__(self, master):
@@ -13,7 +14,7 @@ class GameOfLife:
         self.cell_size = 12
         self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         self.running = False
-        self.interval = 100  # milliseconds
+        self.interval = 100
 
         self.draw_grid()
 
@@ -25,7 +26,23 @@ class GameOfLife:
 
         self.update_timer = None
 
+        self.control_frame = tk.Frame(master)
+        self.control_frame.pack()
+
+        self.reset_button = tk.Button(self.control_frame, text="Reset", command=self.reset_grid)
+        self.reset_button.pack(side=tk.LEFT)
+
+        self.randomize_button = tk.Button(self.control_frame, text="Randomize", command=self.randomize_grid)
+        self.randomize_button.pack(side=tk.LEFT)
+
+        self.save_button = tk.Button(self.control_frame, text="Save", command=self.save_grid)
+        self.save_button.pack(side=tk.LEFT)
+
+        self.load_button = tk.Button(self.control_frame, text="Load", command=self.load_grid)
+        self.load_button.pack(side=tk.LEFT)
+
     def draw_grid(self):
+        self.canvas.delete("all")
         for i in range(self.grid_size):
             for j in range(self.grid_size):
                 x0 = i * self.cell_size
@@ -92,6 +109,26 @@ class GameOfLife:
         if self.running:
             self.stop_game(None)
             self.start_game(None)
+
+    def reset_grid(self):
+        self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
+        self.draw_grid()
+
+    def randomize_grid(self):
+        self.grid = [[random.choice([0, 1]) for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        self.draw_grid()
+
+    def save_grid(self):
+        with open("grid_state.pkl", "wb") as f:
+            pickle.dump(self.grid, f)
+
+    def load_grid(self):
+        try:
+            with open("grid_state.pkl", "rb") as f:
+                self.grid = pickle.load(f)
+            self.draw_grid()
+        except FileNotFoundError:
+            pass
 
 if __name__ == "__main__":
     root = tk.Tk()
