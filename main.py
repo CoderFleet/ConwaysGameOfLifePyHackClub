@@ -1,6 +1,7 @@
 import tkinter as tk
 import random
 import pickle
+import copy
 
 class GameOfLife:
     def __init__(self, master):
@@ -15,16 +16,6 @@ class GameOfLife:
         self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         self.running = False
         self.interval = 100
-
-        self.draw_grid()
-
-        self.canvas.bind("<Button-1>", self.toggle_cell)
-        self.master.bind("<space>", self.toggle_game)
-        self.master.bind("<Escape>", self.stop_game)
-        self.master.bind("<Up>", self.increase_speed)
-        self.master.bind("<Down>", self.decrease_speed)
-
-        self.update_timer = None
 
         self.control_frame = tk.Frame(master)
         self.control_frame.pack()
@@ -41,8 +32,34 @@ class GameOfLife:
         self.load_button = tk.Button(self.control_frame, text="Load", command=self.load_grid)
         self.load_button.pack(side=tk.LEFT)
 
+        self.undo_button = tk.Button(self.control_frame, text="Undo", command=self.undo_grid)
+        self.undo_button.pack(side=tk.LEFT)
+
+        self.redo_button = tk.Button(self.control_frame, text="Redo", command=self.redo_grid)
+        self.redo_button.pack(side=tk.LEFT)
+
+        self.status_label = tk.Label(master, text="Status: Idle")
+        self.status_label.pack()
+
+        self.alive_count_label = tk.Label(master, text="Alive Cells: 0")
+        self.alive_count_label.pack()
+
+        self.canvas.bind("<Button-1>", self.toggle_cell)
+        self.master.bind("<space>", self.toggle_game)
+        self.master.bind("<Escape>", self.stop_game)
+        self.master.bind("<Up>", self.increase_speed)
+        self.master.bind("<Down>", self.decrease_speed)
+
+        self.update_timer = None
+
+        self.history = []
+        self.future = []
+
+        self.draw_grid()
+
     def draw_grid(self):
         self.canvas.delete("all")
+        alive_count = 0
         for i in range(self.grid_size):
             for j in range(self.grid_size):
                 x0 = i * self.cell_size
@@ -50,11 +67,16 @@ class GameOfLife:
                 x1 = x0 + self.cell_size
                 y1 = y0 + self.cell_size
                 color = "black" if self.grid[i][j] else "white"
+                if self.grid[i][j]:
+                    alive_count += 1
                 self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="gray")
+        self.status_label.config(text=f"Status: {'Running' if self.running else 'Paused'}")
+        self.alive_count_label.config(text=f"Alive Cells: {alive_count}")
 
     def toggle_cell(self, event):
         x = event.x // self.cell_size
         y = event.y // self.cell_size
+        self.save_state(self.grid)
         self.grid[x][y] = 1 - self.grid[x][y]
         self.draw_grid()
 
@@ -68,12 +90,14 @@ class GameOfLife:
         self.running = True
         self.update_grid()
         self.update_timer = self.master.after(self.interval, self.update_grid)
+        self.status_label.config(text="Status: Running")
 
     def stop_game(self, event):
         self.running = False
         if self.update_timer:
             self.master.after_cancel(self.update_timer)
             self.update_timer = None
+        self.status_label.config(text="Status: Paused")
 
     def update_grid(self):
         if not self.running:
@@ -111,10 +135,12 @@ class GameOfLife:
             self.start_game(None)
 
     def reset_grid(self):
+        self.save_state(self.grid)
         self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         self.draw_grid()
 
     def randomize_grid(self):
+        self.save_state(self.grid)
         self.grid = [[random.choice([0, 1]) for _ in range(self.grid_size)] for _ in range(self.grid_size)]
         self.draw_grid()
 
@@ -129,6 +155,22 @@ class GameOfLife:
             self.draw_grid()
         except FileNotFoundError:
             pass
+
+    def save_state(self, state):
+        self.history.append(copy.deepcopy(state))
+        self.future.clear()
+
+    def undo_grid(self):
+        if self.history:
+            self.future.append(self.grid)
+            self.grid = self.history.pop()
+            self.draw_grid()
+
+    def redo_grid(self):
+        if self.future:
+            self.save_state(self.grid)
+            self.grid = self.future.pop()
+            self.draw_grid()
 
 if __name__ == "__main__":
     root = tk.Tk()
