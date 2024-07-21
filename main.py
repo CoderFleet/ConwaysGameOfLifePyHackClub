@@ -38,13 +38,26 @@ class GameOfLife:
         self.redo_button = tk.Button(self.control_frame, text="Redo", command=self.redo_grid)
         self.redo_button.pack(side=tk.LEFT)
 
+        self.clear_button = tk.Button(self.control_frame, text="Clear", command=self.clear_grid)
+        self.clear_button.pack(side=tk.LEFT)
+
+        self.grid_lines_button = tk.Button(self.control_frame, text="Toggle Grid Lines", command=self.toggle_grid_lines)
+        self.grid_lines_button.pack(side=tk.LEFT)
+
+        self.drawing_mode_button = tk.Button(self.control_frame, text="Drawing Mode", command=self.toggle_drawing_mode)
+        self.drawing_mode_button.pack(side=tk.LEFT)
+
         self.status_label = tk.Label(master, text="Status: Idle")
         self.status_label.pack()
 
         self.alive_count_label = tk.Label(master, text="Alive Cells: 0")
         self.alive_count_label.pack()
 
+        self.interval_label = tk.Label(master, text=f"Interval: {self.interval} ms")
+        self.interval_label.pack()
+
         self.canvas.bind("<Button-1>", self.toggle_cell)
+        self.canvas.bind("<B1-Motion>", self.draw_cells)
         self.master.bind("<space>", self.toggle_game)
         self.master.bind("<Escape>", self.stop_game)
         self.master.bind("<Up>", self.increase_speed)
@@ -54,6 +67,9 @@ class GameOfLife:
 
         self.history = []
         self.future = []
+
+        self.show_grid_lines = True
+        self.drawing_mode = False
 
         self.draw_grid()
 
@@ -69,16 +85,34 @@ class GameOfLife:
                 color = "black" if self.grid[i][j] else "white"
                 if self.grid[i][j]:
                     alive_count += 1
-                self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="gray")
+                self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="gray" if self.show_grid_lines else "")
         self.status_label.config(text=f"Status: {'Running' if self.running else 'Paused'}")
         self.alive_count_label.config(text=f"Alive Cells: {alive_count}")
+        self.interval_label.config(text=f"Interval: {self.interval} ms")
 
     def toggle_cell(self, event):
-        x = event.x // self.cell_size
-        y = event.y // self.cell_size
-        self.save_state(self.grid)
-        self.grid[x][y] = 1 - self.grid[x][y]
-        self.draw_grid()
+        if not self.drawing_mode:
+            x = event.x // self.cell_size
+            y = event.y // self.cell_size
+            self.save_state(self.grid)
+            self.grid[x][y] = 1 - self.grid[x][y]
+            self.draw_grid()
+
+    def draw_cells(self, event):
+        if self.drawing_mode:
+            x = event.x // self.cell_size
+            y = event.y // self.cell_size
+            if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                self.save_state(self.grid)
+                self.grid[x][y] = 1
+                self.draw_grid()
+
+    def toggle_drawing_mode(self):
+        self.drawing_mode = not self.drawing_mode
+        if self.drawing_mode:
+            self.drawing_mode_button.config(text="Drawing Mode: ON")
+        else:
+            self.drawing_mode_button.config(text="Drawing Mode: OFF")
 
     def toggle_game(self, event):
         if self.running:
@@ -127,12 +161,14 @@ class GameOfLife:
             if self.running:
                 self.stop_game(None)
                 self.start_game(None)
+        self.interval_label.config(text=f"Interval: {self.interval} ms")
 
     def decrease_speed(self, event):
         self.interval += 10
         if self.running:
             self.stop_game(None)
             self.start_game(None)
+        self.interval_label.config(text=f"Interval: {self.interval} ms")
 
     def reset_grid(self):
         self.save_state(self.grid)
@@ -142,6 +178,15 @@ class GameOfLife:
     def randomize_grid(self):
         self.save_state(self.grid)
         self.grid = [[random.choice([0, 1]) for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        self.draw_grid()
+
+    def clear_grid(self):
+        self.save_state(self.grid)
+        self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
+        self.draw_grid()
+
+    def toggle_grid_lines(self):
+        self.show_grid_lines = not self.show_grid_lines
         self.draw_grid()
 
     def save_grid(self):
@@ -171,6 +216,8 @@ class GameOfLife:
             self.save_state(self.grid)
             self.grid = self.future.pop()
             self.draw_grid()
+        else:
+            self.status_label.config(text="Status: Nothing to redo")
 
 if __name__ == "__main__":
     root = tk.Tk()
