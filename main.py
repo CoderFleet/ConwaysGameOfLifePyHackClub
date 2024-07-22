@@ -4,7 +4,8 @@ import pickle
 import copy
 import tkinter.simpledialog
 from tkinter.colorchooser import askcolor
-import os
+import cv2
+import numpy as np
 
 class GameOfLife:
     def __init__(self, master):
@@ -67,8 +68,8 @@ class GameOfLife:
         self.size_button = tk.Button(self.control_frame, text="Set Cell Size", command=self.set_cell_size)
         self.size_button.pack(side=tk.LEFT)
 
-        self.templates_button = tk.Button(self.control_frame, text="Load Template", command=self.load_template)
-        self.templates_button.pack(side=tk.LEFT)
+        self.record_button = tk.Button(self.control_frame, text="Start Recording", command=self.toggle_recording)
+        self.record_button.pack(side=tk.LEFT)
 
         self.status_label = tk.Label(master, text="Status: Idle")
         self.status_label.pack()
@@ -95,6 +96,9 @@ class GameOfLife:
         self.drawing_mode = False
         self.theme = "Light"
         self.cell_color = "black"
+        self.recording = False
+        self.video_writer = None
+        self.frame_count = 0
 
         self.draw_grid()
 
@@ -120,6 +124,41 @@ class GameOfLife:
         self.status_label.config(text=f"Status: {'Running' if self.running else 'Paused'}")
         self.alive_count_label.config(text=f"Alive Cells: {alive_count}")
         self.interval_label.config(text=f"Interval: {self.interval} ms")
+
+        if self.recording:
+            self.capture_frame()
+
+    def toggle_recording(self):
+        if self.recording:
+            self.recording = False
+            self.record_button.config(text="Start Recording")
+            if self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+            self.status_label.config(text="Status: Recording Stopped")
+        else:
+            self.recording = True
+            self.record_button.config(text="Stop Recording")
+            self.status_label.config(text="Status: Recording")
+            self.start_recording()
+
+    def start_recording(self):
+        filename = tk.simpledialog.askstring("File Name", "Enter the filename for the video:")
+        if filename:
+            fourcc = cv2.VideoWriter_fourcc(*"XVID")
+            self.video_writer = cv2.VideoWriter(filename + ".avi", fourcc, 20.0, (self.grid_size * self.cell_size, self.grid_size * self.cell_size))
+        else:
+            self.recording = False
+            self.record_button.config(text="Start Recording")
+            self.status_label.config(text="Status: Recording Error")
+
+    def capture_frame(self):
+        canvas_postscript = self.canvas.postscript(colormode='color')
+        img = tk.PhotoImage(data=canvas_postscript)
+        frame = np.array(img.convert('RGB'))
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        self.video_writer.write(frame)
+        self.frame_count += 1
 
     def toggle_grid_lines(self):
         self.show_grid_lines = not self.show_grid_lines
@@ -221,12 +260,12 @@ class GameOfLife:
         new_grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         for i in range(self.grid_size):
             for j in range(self.grid_size):
-                neighbors = sum([
-                    self.grid[i2][j2]
-                    for i2 in range(i-1, i+2)
-                    for j2 in range(j-1, j+2)
-                    if (i != i2 or j != j2) and 0 <= i2 < self.grid_size and 0 <= j2 < self.grid_size
-                ])
+                neighbors = sum(
+                    self.grid[x][y]
+                    for x in range(max(0, i-1), min(self.grid_size, i+2))
+                    for y in range(max(0, j-1), min(self.grid_size, j+2))
+                    if (x, y) != (i, j)
+                )
                 if self.grid[i][j] == 1 and neighbors in [2, 3]:
                     new_grid[i][j] = 1
                 elif self.grid[i][j] == 0 and neighbors == 3:
@@ -294,22 +333,6 @@ class GameOfLife:
             self.draw_grid()
         else:
             self.status_label.config(text="Status: Nothing to redo")
-
-    def load_template(self):
-        template_files = [f for f in os.listdir("templates") if f.endswith(".txt")]
-        templates = [os.path.splitext(f)[0] for f in template_files]
-        choice = tk.simpledialog.askstring("Choose Template", f"Available templates: {', '.join(templates)}")
-        if choice and f"{choice}.txt" in template_files:
-            self.apply_template(choice)
-
-    def apply_template(self, template_name):
-        self.save_state(self.grid)
-        with open(f"templates/{template_name}.txt", "r") as file:
-            pattern = [tuple(map(int, line.strip().split(','))) for line in file]
-        for x, y in pattern:
-            if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
-                self.grid[x][y] = 1
-        self.draw_grid()
 
 if __name__ == "__main__":
     root = tk.Tk()
