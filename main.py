@@ -3,6 +3,8 @@ import random
 import pickle
 import copy
 import tkinter.simpledialog
+from tkinter.colorchooser import askcolor
+import os
 
 class GameOfLife:
     def __init__(self, master):
@@ -59,6 +61,15 @@ class GameOfLife:
         self.theme_button = tk.Button(self.control_frame, text="Theme: Light", command=self.switch_theme)
         self.theme_button.pack(side=tk.LEFT)
 
+        self.color_button = tk.Button(self.control_frame, text="Cell Color", command=self.choose_color)
+        self.color_button.pack(side=tk.LEFT)
+
+        self.size_button = tk.Button(self.control_frame, text="Set Cell Size", command=self.set_cell_size)
+        self.size_button.pack(side=tk.LEFT)
+
+        self.templates_button = tk.Button(self.control_frame, text="Load Template", command=self.load_template)
+        self.templates_button.pack(side=tk.LEFT)
+
         self.status_label = tk.Label(master, text="Status: Idle")
         self.status_label.pack()
 
@@ -83,19 +94,15 @@ class GameOfLife:
         self.show_grid_lines = True
         self.drawing_mode = False
         self.theme = "Light"
+        self.cell_color = "black"
 
         self.draw_grid()
-
-    def toggle_grid_lines(self):
-        self.show_grid_lines = not            self.show_grid_lines
-        self.draw_grid()
-
 
     def draw_grid(self):
         self.canvas.delete("all")
         alive_count = 0
         colors = {
-            "Light": {"alive": "black", "dead": "white", "outline": "gray"},
+            "Light": {"alive": self.cell_color, "dead": "white", "outline": "gray"},
             "Dark": {"alive": "white", "dead": "black", "outline": "darkgray"},
             "Blue": {"alive": "blue", "dead": "lightblue", "outline": "gray"},
         }
@@ -113,6 +120,10 @@ class GameOfLife:
         self.status_label.config(text=f"Status: {'Running' if self.running else 'Paused'}")
         self.alive_count_label.config(text=f"Alive Cells: {alive_count}")
         self.interval_label.config(text=f"Interval: {self.interval} ms")
+
+    def toggle_grid_lines(self):
+        self.show_grid_lines = not self.show_grid_lines
+        self.draw_grid()
 
     def toggle_cell(self, event):
         if not self.drawing_mode:
@@ -145,13 +156,27 @@ class GameOfLife:
         self.theme_button.config(text=f"Theme: {self.theme}")
         self.draw_grid()
 
+    def choose_color(self):
+        color = askcolor()[1]
+        if color:
+            self.cell_color = color
+            self.draw_grid()
+
+    def set_cell_size(self):
+        try:
+            new_cell_size = int(tk.simpledialog.askstring("Cell Size", "Enter new cell size:"))
+            if new_cell_size > 0:
+                self.cell_size = new_cell_size
+                self.canvas.config(width=self.grid_size * self.cell_size, height=self.grid_size * self.cell_size)
+                self.draw_grid()
+        except (ValueError, TypeError):
+            pass
+
     def set_custom_grid(self):
         try:
             new_grid_size = int(tk.simpledialog.askstring("Grid Size", "Enter grid size:"))
-            new_cell_size = int(tk.simpledialog.askstring("Cell Size", "Enter cell size:"))
-            if new_grid_size > 0 and new_cell_size > 0:
+            if new_grid_size > 0:
                 self.grid_size = new_grid_size
-                self.cell_size = new_cell_size
                 self.grid = [[0] * self.grid_size for _ in range(self.grid_size)]
                 self.canvas.config(width=self.grid_size * self.cell_size, height=self.grid_size * self.cell_size)
                 self.draw_grid()
@@ -196,12 +221,12 @@ class GameOfLife:
         new_grid = [[0] * self.grid_size for _ in range(self.grid_size)]
         for i in range(self.grid_size):
             for j in range(self.grid_size):
-                neighbors = sum(
-                    self.grid[x][y]
-                    for x in range(max(0, i-1), min(self.grid_size, i+2))
-                    for y in range(max(0, j-1), min(self.grid_size, j+2))
-                    if (x, y) != (i, j)
-                )
+                neighbors = sum([
+                    self.grid[i2][j2]
+                    for i2 in range(i-1, i+2)
+                    for j2 in range(j-1, j+2)
+                    if (i != i2 or j != j2) and 0 <= i2 < self.grid_size and 0 <= j2 < self.grid_size
+                ])
                 if self.grid[i][j] == 1 and neighbors in [2, 3]:
                     new_grid[i][j] = 1
                 elif self.grid[i][j] == 0 and neighbors == 3:
@@ -217,14 +242,12 @@ class GameOfLife:
             if self.running:
                 self.stop_game(None)
                 self.start_game(None)
-        self.interval_label.config(text=f"Interval: {self.interval} ms")
 
     def decrease_speed(self, event):
         self.interval += 10
         if self.running:
             self.stop_game(None)
             self.start_game(None)
-        self.interval_label.config(text=f"Interval: {self.interval} ms")
 
     def reset_grid(self):
         self.save_state(self.grid)
@@ -271,6 +294,22 @@ class GameOfLife:
             self.draw_grid()
         else:
             self.status_label.config(text="Status: Nothing to redo")
+
+    def load_template(self):
+        template_files = [f for f in os.listdir("templates") if f.endswith(".txt")]
+        templates = [os.path.splitext(f)[0] for f in template_files]
+        choice = tk.simpledialog.askstring("Choose Template", f"Available templates: {', '.join(templates)}")
+        if choice and f"{choice}.txt" in template_files:
+            self.apply_template(choice)
+
+    def apply_template(self, template_name):
+        self.save_state(self.grid)
+        with open(f"templates/{template_name}.txt", "r") as file:
+            pattern = [tuple(map(int, line.strip().split(','))) for line in file]
+        for x, y in pattern:
+            if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+                self.grid[x][y] = 1
+        self.draw_grid()
 
 if __name__ == "__main__":
     root = tk.Tk()
